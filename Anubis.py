@@ -14,6 +14,10 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from pathlib import Path
 
+import CSharp_Coloring
+import FastExecuter
+
+
 def serial_ports():
     """ Lists serial port names
         :raises EnvironmentError:
@@ -66,9 +70,12 @@ class Signal(QObject):
 #
 #
 
+
 # Making text editor as A global variable (to solve the issue of being local to (self) in widget class)
 text = QTextEdit
 text2 = QTextEdit
+
+language = "Python"
 
 #
 #
@@ -81,10 +88,13 @@ text2 = QTextEdit
 #
 
 # this class is made to connect the QTab with the necessary layouts
+
+
 class text_widget(QWidget):
     def __init__(self):
         super().__init__()
         self.itUI()
+
     def itUI(self):
         global text
         text = QTextEdit()
@@ -94,13 +104,11 @@ class text_widget(QWidget):
         self.setLayout(hbox)
 
 
-
 #
 #
 ############ end of Class ############
 #
 #
-
 
 
 #
@@ -114,9 +122,10 @@ class text_widget(QWidget):
 #
 class Widget(QWidget):
 
-    def __init__(self):
+    def __init__(self, ui):
         super().__init__()
         self.initUI()
+        self.ui = ui
 
     def initUI(self):
 
@@ -133,7 +142,7 @@ class Widget(QWidget):
         self.treeview = QTreeView()
 
         # making a variable (path) and setting it to the root path (surely I can set it to whatever the root I want, not the default)
-        #path = QDir.rootPath()
+        # path = QDir.rootPath()
 
         path = QDir.currentPath()
 
@@ -144,7 +153,8 @@ class Widget(QWidget):
         # NoDotAndDotDot => Do not list the special entries "." and "..".
         # AllDirs =>List all directories; i.e. don't apply the filters to directory names.
         # Files => List files.
-        self.dirModel.setFilter(QDir.NoDotAndDotDot | QDir.AllDirs | QDir.Files)
+        self.dirModel.setFilter(QDir.NoDotAndDotDot |
+                                QDir.AllDirs | QDir.Files)
         self.treeview.setModel(self.dirModel)
         self.treeview.setRootIndex(self.dirModel.index(path))
         self.treeview.clicked.connect(self.on_clicked)
@@ -185,9 +195,14 @@ class Widget(QWidget):
     # defining a new Slot (takes string) to save the text inside the first text editor
     @pyqtSlot(str)
     def Saving(s):
-        with open('main.py', 'w') as f:
-            TEXT = text.toPlainText()
-            f.write(TEXT)
+        if language == "Python":
+            with open('main.py', 'w') as f:
+                TEXT = text.toPlainText()
+                f.write(TEXT)
+        else:
+            with open('main.cs', 'w') as f:
+                TEXT = text.toPlainText()
+                f.write(TEXT)
 
     # defining a new Slot (takes string) to set the string to the text editor
     @pyqtSlot(str)
@@ -200,8 +215,14 @@ class Widget(QWidget):
         nn = self.sender().model().filePath(index)
         nn = tuple([nn])
 
+        file_ext = nn[0].split(".")[1]
+        if file_ext == "py":
+            UI.set_python(self.ui)
+        else:
+            UI.set_csharp(self.ui)
+
         if nn[0]:
-            f = open(nn[0],'r')
+            f = open(nn[0], 'r')
             with f:
                 data = f.read()
                 text.setText(data)
@@ -215,6 +236,8 @@ class Widget(QWidget):
 # defining a new Slot (takes string)
 # Actually I could connect the (mainwindow) class directly to the (widget class) but I've made this function in between for futuer use
 # All what it do is to take the (input string) and establish a connection with the widget class, send the string to it
+
+
 @pyqtSlot(str)
 def reading(s):
     b = Signal()
@@ -222,6 +245,8 @@ def reading(s):
     b.reading.emit(s)
 
 # same as reading Function
+
+
 @pyqtSlot(str)
 def Openning(s):
     b = Signal()
@@ -236,6 +261,8 @@ def Openning(s):
 #
 #
 #
+
+
 class UI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -260,6 +287,9 @@ class UI(QMainWindow):
         filemenu = menu.addMenu('File')
         Port = menu.addMenu('Port')
         Run = menu.addMenu('Run')
+
+        fast_menu = menu.addMenu('Fast Executer')
+        self.language_menu = menu.addMenu('Python')
 
         # As any PC or laptop have many ports, so I need to list them to the User
         # so I made (Port_Action) to add the Ports got from (serial_ports()) function
@@ -294,19 +324,30 @@ class UI(QMainWindow):
         Open_Action.setShortcut("Ctrl+O")
         Open_Action.triggered.connect(self.open)
 
-
         filemenu.addAction(Save_Action)
         filemenu.addAction(Close_Action)
         filemenu.addAction(Open_Action)
 
+        fast_action = QAction("Fast Executer", self)
+        fast_action.triggered.connect(self.fast_execute)
+        fast_action.setShortcut("Ctrl+e")
+        fast_menu.addAction(fast_action)
+
+        python_action = QAction('Python', self)
+        python_action.triggered.connect(self.set_python)
+
+        csharp_action = QAction('C#', self)
+        csharp_action.triggered.connect(self.set_csharp)
+
+        self.language_menu.addAction(python_action)
+        self.language_menu.addAction(csharp_action)
 
         # Seting the window Geometry
         self.setGeometry(200, 150, 600, 500)
         self.setWindowTitle('Anubis IDE')
         self.setWindowIcon(QtGui.QIcon('Anubis.png'))
-        
 
-        widget = Widget()
+        widget = Widget(self)
 
         self.setCentralWidget(widget)
         self.show()
@@ -316,7 +357,7 @@ class UI(QMainWindow):
         if self.port_flag == 0:
             mytext = text.toPlainText()
         #
-        ##### Compiler Part
+        # Compiler Part
         #
 #            ide.create_file(mytext)
 #            ide.upload_file(self.portNo)
@@ -325,30 +366,54 @@ class UI(QMainWindow):
         else:
             text2.append("Please Select Your Port Number First")
 
-
     # this function is made to get which port was selected by the user
+
     @QtCore.pyqtSlot()
     def PortClicked(self):
         action = self.sender()
         self.portNo = action.text()
         self.port_flag = 0
 
-
-
     # I made this function to save the code into a file
+
     def save(self):
         self.b.reading.emit("name")
 
-
     # I made this function to open a file and exhibits it to the user in a text editor
+
     def open(self):
-        file_name = QFileDialog.getOpenFileName(self,'Open File','/home')
+        file_name = QFileDialog.getOpenFileName(self, 'Open File', '/home')
+        file_ext = file_name[0].split(".")[1]
+        if file_ext == "py":
+            self.set_python()
+        else:
+            self.set_csharp()
 
         if file_name[0]:
-            f = open(file_name[0],'r')
+            f = open(file_name[0], 'r')
             with f:
                 data = f.read()
             self.Open_Signal.reading.emit(data)
+
+    def fast_execute(self):
+        if language == "Python":
+            main_func = FastExecuter.FastExecuter.fast_execute(
+                text.toPlainText())
+            text.setText(main_func)
+        else:
+            text2.append("Fast Executor option is only available with Python")
+
+    def set_python(self):
+        self.language_menu.setTitle("Python")
+        global language
+        language = "Python"
+        Python_Coloring.PythonHighlighter(text)
+
+    def set_csharp(self):
+        self.language_menu.setTitle("C#")
+        global language
+        language = "C#"
+        CSharp_Coloring.CSharpHighlighter(text)
 
 
 #
@@ -356,7 +421,6 @@ class UI(QMainWindow):
 ############ end of Class ############
 #
 #
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = UI()
